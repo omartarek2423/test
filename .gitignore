@@ -1,0 +1,15 @@
+# Ignore Terraform state and cache
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+
+# macOS system files
+.DS_Store
+.Trash/
+
+# IDE/editor files
+.vscode/
+.idea/
+
