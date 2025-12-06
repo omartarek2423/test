@@ -118,7 +118,7 @@ resource "aws_security_group" "web" {
 ###########################
 resource "aws_instance" "web" {
   ami                    = "ami-0c02fb55956c7d316" # Amazon Linux 2
-  instance_type          = "t2.micro"
+  instance_type          = "t3.small"
   subnet_id              = aws_subnet.public1.id
   vpc_security_group_ids = [aws_security_group.web.id]
 
