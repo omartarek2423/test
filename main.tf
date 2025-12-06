@@ -1,139 +1,93 @@
-###########################
-# Provider
-###########################
+terraform {
+  required_version = ">= 1.3"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 provider "aws" {
   region = "us-east-1"
 }
 
-###########################
-# VPC
-###########################
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  tags = {
-    Name = "my-vpc"
-  }
-}
+# --------------------------------------------------------------------
+# DATA: Get AWS Account ID
+# --------------------------------------------------------------------
+data "aws_caller_identity" "current" {}
 
-###########################
-# Internet Gateway
-###########################
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main.id
-  tags = {
-    Name = "my-igw"
-  }
-}
+# --------------------------------------------------------------------
+# VPC with 2 Public Subnets (Required by EKS)
+# --------------------------------------------------------------------
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.0.0"
 
-###########################
-# Public Subnets
-###########################
-resource "aws_subnet" "public1" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
+  name = "eks-vpc"
+  cidr = "10.0.0.0/16"
+
+  azs            = ["us-east-1a", "us-east-1b"]
+  public_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+
+  enable_nat_gateway      = false
   map_public_ip_on_launch = true
-  availability_zone       = "us-east-1a"
 
   tags = {
-    Name = "public-subnet-1"
+    Environment = "dev"
+    CreatedBy   = "Terraform"
   }
 }
 
-resource "aws_subnet" "public2" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "us-east-1b"
+# --------------------------------------------------------------------
+# EKS Cluster
+# --------------------------------------------------------------------
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "20.8.4"
 
-  tags = {
-    Name = "public-subnet-2"
-  }
-}
+  cluster_name    = "my-eks-cluster"
+  cluster_version = "1.30"
 
-###########################
-# Route Table + Route
-###########################
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.public_subnets
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
-  }
+  cluster_endpoint_public_access = true
 
-  tags = {
-    Name = "public-rt"
-  }
-}
+  # ----------------------------------------------------------------
+  # IAM User Access: Give user omarmm full Kubernetes admin access
+  # ----------------------------------------------------------------
+  access_entries = {
+    omarmm = {
+      principal_arn = "arn:aws:iam::514005485972:user/omarmm"
 
-resource "aws_route_table_association" "a1" {
-  subnet_id      = aws_subnet.public1.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "a2" {
-  subnet_id      = aws_subnet.public2.id
-  route_table_id = aws_route_table.public.id
-}
-
-###########################
-# Security Group
-###########################
-resource "aws_security_group" "web" {
-  name        = "web-sg"
-  description = "Allow HTTP and SSH"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+      policy_associations = {
+        omarmm_admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
   }
 
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  # ----------------------------------------------------------------
+  # Node Group: Running in one AZ (us-east-1a)
+  # ----------------------------------------------------------------
+  eks_managed_node_groups = {
+    workers = {
+      instance_types = ["t3.small"]
+      subnet_ids     = [module.vpc.public_subnets[0]]
+      min_size       = 2
+      desired_size   = 2
+      max_size       = 3
+    }
   }
 
   tags = {
-    Name = "web-sg"
-  }
-}
-
-###########################
-# EC2 + User Data
-###########################
-resource "aws_instance" "web" {
-  ami                    = "ami-0c02fb55956c7d316" # Amazon Linux 2
-  instance_type          = "t3.small"
-  subnet_id              = aws_subnet.public1.id
-  vpc_security_group_ids = [aws_security_group.web.id]
-
-  associate_public_ip_address = true
-
-  user_data = <<EOF
-#!/bin/bash
-yum update -y
-amazon-linux-extras install nginx1 -y
-systemctl enable nginx
-systemctl start nginx
-echo "<h1>Welcome! My name is OMAR TAREK</h1>" > /usr/share/nginx/html/index.html
-EOF
-
-  tags = {
-    Name = "web-server"
+    Environment = "dev"
+    Terraform   = "true"
   }
 }
