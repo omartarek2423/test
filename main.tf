@@ -7,6 +7,14 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  backend "s3" {
+    bucket         = "omarmm32345"   # Replace with your bucket name
+    key            = "eks/terraform.tfstate"       # Path inside the bucket
+    region         = "us-east-1"                   # Bucket region
+    dynamodb_table = "terraform-lock-table"        # DynamoDB table for state locking
+    encrypt        = true
+  }
 }
 
 provider "aws" {
@@ -56,7 +64,7 @@ module "eks" {
   cluster_endpoint_public_access = true
 
   # ----------------------------------------------------------------
-  # IAM User Access: Give user omarmm full Kubernetes admin access
+  # IAM User Access
   # ----------------------------------------------------------------
   access_entries = {
     omarmm = {
