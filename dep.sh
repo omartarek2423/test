@@ -6,6 +6,11 @@ CLUSTER_NAME="my-eks-cluster"
 ACCOUNT_ID="514005485972"
 REGION="us-east-1"
 
+# Ensure eksctl and AWS CLI use environment credentials
+export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-$REGION}
+
 echo "=== Updating package lists ==="
 sudo apt-get update -y
 
