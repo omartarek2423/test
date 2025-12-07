@@ -6,11 +6,6 @@ CLUSTER_NAME="my-eks-cluster"
 ACCOUNT_ID="514005485972"
 REGION="us-east-1"
 
-# Ensure eksctl and AWS CLI use environment credentials
-export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-$REGION}
-
 echo "=== Updating package lists ==="
 sudo apt-get update -y
 
@@ -45,6 +40,18 @@ if ! command -v helm &> /dev/null; then
     echo "Helm not found. Installing Helm..."
     curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
+
+# Install latest kubectl
+echo "=== Installing latest kubectl ==="
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+
+echo "=== Updating kubeconfig for EKS cluster ==="
+aws eks update-kubeconfig --name $CLUSTER_NAME --region $REGION --kubeconfig ./kubeconfig
+export KUBECONFIG=./kubeconfig
+
+kubectl get nodes
 
 echo "=== Associating IAM OIDC Provider ==="
 eksctl utils associate-iam-oidc-provider --cluster $CLUSTER_NAME --region $REGION --approve
