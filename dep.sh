@@ -48,13 +48,14 @@ chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 
 echo "=== Updating kubeconfig for EKS cluster ==="
-aws eks update-kubeconfig --name $CLUSTER_NAME --region $REGION --kubeconfig ./kubeconfig
+aws eks update-kubeconfig --name $CLUSTER_NAME --region $REGION --kubeconfig ./kubeconfig --alias $CLUSTER_NAME
+
+# Fix the API version for kubectl authentication plugin
+sed -i 's/client.authentication.k8s.io\/v1alpha1/client.authentication.k8s.io\/v1beta1/' ./kubeconfig
 export KUBECONFIG=./kubeconfig
 
-kubectl get nodes
-
 echo "=== Associating IAM OIDC Provider ==="
-eksctl utils associate-iam-oidc-provider --cluster $CLUSTER_NAME --region $REGION --approve
+eksctl utils associate-iam-oidc-provider --cluster $CLUSTER_NAME --region $REGION --approve || true
 
 echo "=== Creating EBS CSI IAM policy ==="
 cat <<JSON > ebs-csi-policy.json
@@ -98,7 +99,7 @@ eksctl create iamserviceaccount \
   --name ebs-csi-controller-sa \
   --attach-policy-arn $POLICY_ARN \
   --approve \
-  --override-existing-serviceaccounts
+  --override-existing-serviceaccounts || true
 
 echo "=== Installing EBS CSI Driver using Helm ==="
 helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
